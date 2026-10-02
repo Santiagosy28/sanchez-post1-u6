@@ -4,6 +4,9 @@ import com.tienda.pedidos.descuento.SelectorEstrategiaDescuento;
 import com.tienda.pedidos.dto.PedidoRequest;
 import com.tienda.pedidos.dto.ResultadoPedido;
 import com.tienda.pedidos.validacion.ContextoPedido;
+import com.tienda.pedidos.validacion.PromocionBlackFriday;
+import com.tienda.pedidos.validacion.PromocionCorporativo;
+import com.tienda.pedidos.validacion.PromocionVolumen;
 import com.tienda.pedidos.validacion.ValidadorCliente;
 import com.tienda.pedidos.validacion.ValidadorPedido;
 import com.tienda.pedidos.validacion.ValidadorStock;
@@ -22,12 +25,13 @@ public class GestorPedidos {
     private final JdbcTemplate jdbcTemplate;
 
     public GestorPedidos(ValidadorStock stock, ValidadorCliente cliente,
-                         SelectorEstrategiaDescuento selector, PedidoRepository repository,
+                         PromocionBlackFriday blackFriday, PromocionCorporativo corporativo,
+                         PromocionVolumen volumen, SelectorEstrategiaDescuento selector,
+                         PedidoRepository repository,
                          NotificacionPedidoService notificacion, JdbcTemplate jdbcTemplate) {
-        // La cadena arranca en la cabeza (stock); encadenar() enlaza y devuelve
-        // el siguiente, por lo que primerValidador debe ser el primer eslabon.
+        // Ahora la cadena encadena 5 eslabones: 2 de validacion real + 3 de "promocion".
         this.primerValidador = stock;
-        stock.encadenar(cliente);
+        stock.encadenar(cliente).encadenar(blackFriday).encadenar(corporativo).encadenar(volumen);
         this.selector = selector;
         this.repository = repository;
         this.notificacion = notificacion;
@@ -42,7 +46,8 @@ public class GestorPedidos {
         double subtotal = calcularSubtotal(request); // consulta de precios extraida sin cambios de logica
         contexto.setSubtotal(subtotal);
 
-        double descuento = selector.seleccionar(contexto.getTipoCliente()).calcular(contexto);
+        double descuentoTipoCliente = selector.seleccionar(contexto.getTipoCliente()).calcular(contexto);
+        double descuento = Math.max(descuentoTipoCliente, contexto.getDescuentoCampana());
         double impuesto = (subtotal - subtotal * descuento) * 0.19;
         double total = subtotal - (subtotal * descuento) + impuesto;
 
