@@ -67,6 +67,51 @@ La **persistencia** se extrajo a `PedidoRepository` y la **notificación** a
 delgado que coordina las cuatro capas (validación, descuento, persistencia,
 notificación) sin conocer sus detalles internos.
 
+### Parte 2 — Crecimiento del proyecto
+
+**Antipatrón identificado: Golden Hammer.**
+
+Dos semanas después, mercadeo pidió tres campañas: `BLACK_FRIDAY` (25% fijo),
+`CORPORATIVO` (10% a clientes con NIT) y `VOLUMEN` (12% si el pedido supera 20
+unidades). Se resolvieron **agregando tres eslabones más a la cadena de
+validación** (`PromocionBlackFriday`, `PromocionCorporativo`,
+`PromocionVolumen` extendiendo `ValidadorPedido`), reutilizando Chain of
+Responsibility solo porque "ya funcionó" en la Parte 1 — sin evaluar si el
+nuevo problema tenía esa forma.
+
+Evidencia de que **no** corresponde una cadena:
+
+- **No hay dependencia de orden** entre las tres campañas ni entre ellas y
+  `ValidadorStock`/`ValidadorCliente`: ejecutar `PromocionVolumen` antes o
+  después de `PromocionCorporativo` da el mismo resultado. En cambio
+  `ValidadorStock` sí debe ir antes que `ValidadorCliente`. La propiedad que
+  justificaba la cadena (orden + corte anticipado) está ausente aquí.
+- **Ninguna de las tres rechaza nada**: `ValidadorPedido`, cuyo contrato es
+  "decidir si el pedido continúa o se rechaza", ahora contiene clases que solo
+  escriben en un campo compartido (`descuentoCampana`) y nunca cortan el flujo.
+- **El campo mutable compartido genera ambigüedad**: si dos campañas debieran
+  combinarse (sumar en vez de tomar el máximo), la cadena no lo expresa sin
+  inventar reglas sobre quién sobrescribe a quién en `aplicarDescuentoCampana`.
+
+Esto es **Golden Hammer**: aplicar una herramienta conocida a un problema con
+una forma distinta, en vez de evaluar cuál es la apropiada.
+
+**Patrón aplicado (corrección): Strategy.** Las tres campañas tienen la misma
+forma que `DescuentoVip`/`DescuentoFrecuente` —calculan un porcentaje sin
+depender de un orden—, así que se modelan como `EstrategiaDescuento`
+(`DescuentoBlackFriday`, `DescuentoCorporativo`, `DescuentoVolumen`) y se
+evalúan en `CalculadorDescuentoFinal`, que combina el descuento por tipo de
+cliente con el mayor de las campañas (`Math.max`), la misma regla de negocio
+que antes pero sin un campo mutable escrito por clases que no validan nada.
+*Alternativa descartada:* mantenerlas como eslabones de la cadena — descartada
+explícitamente por ser la causa del antipatrón.
+
+Los tres eslabones `Promocion*` y el campo `descuentoCampana` se **eliminan por
+completo** (no se comentan): dejar código comentado "por si acaso" es el
+mecanismo por el que nace un **Lava Flow**; el historial de Git es el lugar
+correcto para conservar esa referencia. `ValidadorPedido` vuelve a contener
+únicamente `ValidadorStock` y `ValidadorCliente`.
+
 ## Cómo ejecutar
 
 ```
