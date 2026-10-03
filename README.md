@@ -124,7 +124,44 @@ $ mvn test
 > 2.x) que usa el código dado, y el pool Hikari se fija en 1 conexión para que
 > `CALL IDENTITY()` (función de sesión) devuelva el id recién insertado.
 
+## Comparación antes / después de la salida del sistema
+
+El comportamiento observable se mantiene en cada refactorización, verificado
+con `mvn test` (10 pruebas):
+
+| Caso de prueba | God Object (Parte 1) | Orquestador (Parte 1) | Cadena+campañas (Parte 2) | Strategy final (Parte 2) |
+|----------------|----------------------|------------------------|----------------------------|---------------------------|
+| Stock insuficiente | rechazado | rechazado | rechazado | rechazado |
+| Cliente inexistente | "Cliente no registrado" | igual | igual | igual |
+| Moroso con deuda (antes de 20:00) | rechazado | igual | igual | igual |
+| Moroso sin deuda | confirmado | igual | igual | igual |
+| VIP (subtotal 800.000) | total 856.800 (10%) | igual | igual | igual |
+| FRECUENTE (>10 pedidos) | total 219.040 (8%) | igual | igual | igual |
+| Corporativo (NIT) 100.000 | — | — | total 107.100 (10%) | **107.100 (igual)** |
+| Volumen (25 unidades) 250.000 | — | — | total 261.800 (12%) | **261.800 (igual)** |
+| Black Friday activo 10.000 | — | — | total 8.925 (25%) | **8.925 (igual)** |
+
+Las tres campañas producen exactamente el mismo total con la versión corregida
+(Strategy) que con los tres eslabones del Golden Hammer: la corrección es solo
+de diseño, no de comportamiento.
+
 ## Herramientas utilizadas
 
 - Java 17, Spring Boot, Spring JDBC, Maven, H2 Database
 - VS Code / IntelliJ IDEA, Git, GitHub
+
+## Conclusiones
+
+El laboratorio mostró que diagnosticar un antipatrón exige evidencia concreta
+—responsabilidades, niveles de anidamiento, dependencias de orden— y no solo
+nombrarlo: lo que decidió cada refactorización no fue el nombre del patrón sino
+la forma real del problema. En la Parte 1, la dependencia de orden con corte
+anticipado justificó Chain of Responsibility para las validaciones, mientras que
+la ausencia de orden justificó Strategy para los descuentos; aplicar el criterio
+equivocado habría producido el problema inverso. La Parte 2 fue la lección más
+valiosa: reutilizar sin pensar la cadena que "ya había funcionado" convirtió una
+buena solución en un Golden Hammer, y la señal de alerta fue que los nuevos
+eslabones no cumplían el contrato de `ValidadorPedido` (nunca rechazaban) ni
+tenían dependencia de orden. Finalmente, eliminar el código descartado en lugar
+de comentarlo evita un Lava Flow: el historial de Git conserva la referencia sin
+contaminar el código activo.
